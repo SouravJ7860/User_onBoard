@@ -10,83 +10,87 @@ const { signupSchema, verifySignupOTPSchema , loginSchema, resetPasswordSchema, 
 const JWT_SECRET = '7988';
 
 
-
 // Signup Controller
-exports.signup  = async (req, res) => {
+exports.signup = async (req, res) => {
   const { error } = signupSchema.validate(req.body);
   if (error) {
     return res.status(400).json({ message: error.details[0].message });
   }
-   
-  const { email, phone, password } = req.body;
+
+  const { email, phone, countryCode, password } = req.body;
 
   try {
-    // Check if email or phone already exists in User
-    let user = await User.findOne({ $or: [{ email }, { phone }] });
-    if (user && user.verified) {
-      return res.status(400).json({ message: 'Email or phone already in use.' });
+    let user = null;
+
+    // Check if email already exists in User
+    if (email) {
+      user = await User.findOne({ email });
+      if (user && user.verified) {
+        return res.status(400).json({ message: 'Email already in use.' });
+      }
     }
 
-    // Hash password if user does not exist or is not verified
+    // Check if phone already exists in User
+    if (phone) {
+      user = await User.findOne({ phone });
+      if (user && user.verified) {
+        return res.status(400).json({ message: 'Phone already in use.' });
+      }
+    }
+
+    // Determine if user exists and hash password if necessary
     const hashedPassword = user ? user.password : await bcrypt.hash(password, 10);
 
-    if (email) {
-    // Generate OTP and send email
-    // const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otp = 123456;
-    const otpExpires = Date.now() + 300000; // 5 minutes from now
+    // Prepare update object based on provided data
+    const update = {
+      password: hashedPassword,
+      verified: false,
+      countryCode,
+      ...(email && { email }), // Only add email if it's provided
+      ...(phone && { phone })    // Only add phone if it's provided
+    };
 
-
-    // Update or create user with verified set to false
-    
-     user = await User.findOneAndUpdate(
-      { email },
-      { email, password: hashedPassword, verified: false },
+    // Create or update user with provided data
+    user = await User.findOneAndUpdate(
+      { $or: [{ email }, { phone }] },
+      update,
       { upsert: true, new: true, strict: false }
     );
 
-    // Upsert OTP
-    await OTP.findOneAndUpdate(
-      { email },
-      { email, otp, otpExpires },
-      { upsert: true, new: true }
-    );
+    // Determine which OTP to generate
+    const otp = '123456'; // Use a static OTP for verification
+    const otpExpires = Date.now() + 300000; // 5 minutes from now
 
-    // Send OTP to user's email
-    await sendGmail(email, 'Signup OTP', `Your OTP is ${otp}`);
-
-    return res.status(200).json({ message: 'OTP sent to email.' });
-  } 
-   
-    // If phone is provided, use a static OTP
-    else if (phone) {
-      const otp = '123456'; // Static OTP for phone verification
-      const otpExpires = Date.now() + 300000; 
-
-      // Update or create user with verified set to false
-      const hashedPassword = await bcrypt.hash(password, 10);
-       user = await User.findOneAndUpdate(
-        { phone },
-        { phone, password: hashedPassword, verified: false },
-        { upsert: true, new: true , strict: false}
+    // Upsert OTP based on whether email or phone is provided
+    if (email) {
+      await OTP.findOneAndUpdate(
+        { email },
+        { email, otp, otpExpires },
+        { upsert: true, new: true }
       );
 
-      // Upsert OTP
+      // Send OTP to user's email
+      sendGmail(email, 'Signup OTP', `Your OTP is ${otp}`);
+      return res.status(200).json({ message: 'OTP sent to email.' });
+    }
+
+    if (phone) {
       await OTP.findOneAndUpdate(
         { phone },
         { phone, otp, otpExpires },
         { upsert: true, new: true }
       );
 
-      return res.status(200).json({ message: `Phone OTP is ${otp}.` });
-    } else {
-      return res.status(400).json({ message: 'Email or phone is required.' });
+      return res.status(200).json({ message: 'OTP sent to phone.' });
     }
+
+    return res.status(400).json({ message: 'Email or phone is required.' });
   } catch (error) {
     console.error('Error in signup:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 exports.verifySignupOTP =async (req, res) => {
@@ -368,12 +372,12 @@ exports.deleteAccount = async (req, res) => {
 
 // Upload Profile Image Controller
 exports.uploadProfileImage = async (req, res) => {
-  console.log('req: ', req);
+  // console.log('req: ', req);
   try {
     const userId = req.user._id;
     const imagePath = path.join('uploads', req.file.filename);
-    console.log('imagePath: ', imagePath);  
-    console.log('req.file.filename: ', req.file);
+    // console.log('imagePath: ', imagePath);  
+    // console.log('req.file.filename: ', req.file);
 
     // Update the user's profile with the image path
     const user = await User.findById(userId);

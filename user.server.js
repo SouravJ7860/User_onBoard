@@ -11,7 +11,6 @@ require('dotenv').config();
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-const PORT = process.env.PORT || 4000;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -23,6 +22,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Internal server error' });
 });
 
+const PORT = process.env.PORT || 4001;
 mongoose.connect(process.env.MONGO_URI).then(() => {
   console.log('Connected to MongoDB');
   app.listen(PORT, () => {
